@@ -1,0 +1,582 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>ACME DNS</title>
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/league.css">
+		<link rel="stylesheet" href="custom.css">
+    <link rel="stylesheet" href="asciinema-player.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+        <section>
+          <h1 style="line-height: 0.1em;"><span style="font-size: 0.8em;">Setting <span style="font-size: 0.8em;"> up <span style="font-size: 0.8em;">a <span style="font-size: 0.8em;">perfect <span style="font-size: 0.8em;">x509 <span style="font-size: 0.8em;">certificate <span style="font-size: 0.8em;">management <span style="font-size: 0.8em;">infrastructure <span style="font-size: 0.8em;">using <span style="font-size: 0.8em;">acme-dns</span></span></span></span></span></span></span></span></span></span></h1>
+          <br /><br />
+   <h5>Disobey 2019 / @joohoi</h5>
+        </section>
+
+       <section>
+            <h1>WHOAMI</h1>
+            <img src="joohoi_profile.jpg" style="border-radius:50%;width: 15%;" /><br />
+            <ul>
+                <li>Managing the internal red team at <img style="border: 0px; vertical-align: middle;width: 4em;margin: 0px;" data-src="visma_logo.png"></li>
+                <li>Open source stuff: <strong>acme-dns</strong>, <strong>ffuf</strong>, <strong>certbot</strong></li>
+                <li>Dad, board game geek, brewer</li>
+                <li>Vice chairperson @ <a href="https://turkusec.fi/">TurkuSec</a>!</li>
+                <li><a href="https://twitter.com/joohoi">@joohoi</a> everywhere on the inter{webs,tubes,pipes}</li>
+            </ul>
+       </section>
+        <section>
+          <h1>Let's Encrypt & ACME</h1>
+          <ul>
+            <li>Let's Encrypt - CA</li>
+            <li>ACME - Protocol</li>
+            <li>Humble mission - Encrypt ALL THE WEBS</li>
+          </ul>
+        </section>
+        <section>
+          <h1>TLS: not exactly new</h1>
+          <img src="netscape.gif" />
+        </section>
+        <section>
+          <h2>years and TLS/SSL versions go by...</h2>
+          <h1>2010</h1>
+          <ul class="small">
+            <li>SSH has taken over. Nobody even thinks doing tasks over rlogin</li>
+            <li>But web... Only the most critical / banking infra uses HTTPS</li>
+          </ul>
+        </section>
+        <section>
+          <h2>People are trying to push it though</h2>
+          <img src="firesheep.png" style="border: 0px;"/>
+        </section>
+        <section>
+          <h1>2012 - Let's Encrypt</h1>
+          <p class="small">Started by Josh Aas and Eric Rescorla from Mozilla, Peter Eckersley from EFF and J. Alex Halderman from University of Michigan.</p>
+          <p class="small">The project was publicly announced in 2014.</p>
+        </section>
+        <section>
+          <h1>2015 - Go live (BETA)</h1>
+          <ul class="smaller">
+            <li>ACME protocol draft was submitted to IETF in January</li>
+            <li>ISRG Root X1 generated in June</li>
+            <li>First certificate signed by Let's Encrypt intermediate: "helloworld.letsencrypt.org" October 14th</li>
+            <li>Let's Encrypt intermediate cross-signed by IdenTrust
+            <li>Public beta starts in December 3rd!</li>
+            <li>Roughly 30% of web requests made over HTTPS</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Background</h1>
+          <ul>
+            <li><strong>Let's Encrypt</strong> - CA run by ISRG</li>
+            <li><strong>ACME</strong> - Protocol</li>
+            <li><strong>Certbot</strong> - Client software developed by EFF</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Benefits</h1>
+          <h2>Let's Encrypt and ACME</h2>
+          <ul style="font-size: 0.8em;">
+            <li>Automatable</li>
+            <li>Free of charge</li>
+            <li>Open & Transparent</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Importance of transparency and automation</h2>
+          <img src="automation.gif">
+        </section>
+        <section>
+          <section>
+            <h2>What could go wrong? part 1: 404</h2>
+            <ul style="font-size: 0.8em;">
+              <li>GoDaddy HTTP validation picks up validation string from any part of body, regardless of HTTP status code</li>
+              <li>Almost <span class="hlbg">9000</span> certificates revoked as precautionary measure.</li>
+            </ul>
+          </section>
+          <section>
+            <img src="404_valid.png">
+          </section>
+        </section>
+        <section>
+            <h2>What could go wrong? part 2: OCR</h2>
+            <ul style="font-size: 0.8em;">
+              <li>.eu, .be, .at and some other TLDs don't provide whois information as text, but as an image instead, to deter spambots...</li>
+              <li>Comodo using OCR to dig admin email from image...</li>
+              <li>...<span class="hlbg">altelekom.at</span> interpreted as <span class="hlbg">a1telekom.at</span>...</li>
+              <li>...misissued certificate for <span class="hlbg">a1telekom.at</span></li>
+              <li>Found by Florian Heinz and Martin Kluge</li>
+            </ul>
+        </section>
+        <section>
+          <section>
+            <h2>What could go wrong part 3: RAs</h2>
+            <ul style="font-size: 0.8em;">
+              <li>Symantec had a Registration Authority program in place, allowing companies in the program to independently issue certificates under Symantec intermediates</li>
+              <li>Not a problem itself, but responsibility stays with Symantec...
+                <ul>
+                  <li class="smaller">...for misissuances for unvalidated domain names</li>
+                  <li class="smaller">...for typos in domain names</li>
+                  <li class="smaller">...for bogus ST, L, O and OU fields</li>
+                </ul>
+              </li>
+              <li>Potentially 30 000 certificates affected</li>
+            </ul>
+          </section>
+          <section>
+            <h2>Social engineered revocation</h2>
+            <ul style="font-size: 0.8em;">
+              <li>Hanno Böck registered two test domains, and obtained certificates for them from Symantec</li>
+              <li>He created forged private keys for them, and posted the keys to pastebin</li>
+              <li>Reported to Symantec, and got them revoked</li>
+              <li>Symantec tried to hide the reason for (mis)revocation</li>
+            </ul>
+          </section>
+        </section>
+        <section>
+          <h2>What could go wrong? part 4: StartCom / WoSign</h2>
+          <p>Uhh...</p>
+          <ul style="font-size: 0.8em;">
+            <li>Any port for validation</li>
+            <li>Certificates using <span class="hlbg">SNI</span> with <span class="hlbg">subdomain</span>.domain.tld and domain.tld, only <span class="hlbg">subdomain</span>.domain.tld was validated</li>
+            <li>Able to add arbitrary domains to request after validation</li>
+            <li>Backdated SHA-1 certificates (after 1.1.2016)</li>
+          </ul>
+        </section>
+        <section>
+          <img style="background: white; width: 30%;" src="le-logo-standard.png" /><br />
+          <ul style="font-size: 0.8em;">
+            <li>Short certificate lifetime - 90d</li>
+            <li>Only DV certificates</li>
+            <li>Some limitations in place</li>
+            <li>Speaks ACME</li>
+          </ul>
+        </section>
+        <section>
+          <img style="background: white;" src="acme-logo.png" /><br />
+            <ul style="font-size: 0.8em;">
+                <li>IETF standard, RFC 8555</li>
+                <li>JSON over HTTPS</li>
+                <li>Has it all: accounts, TOS, challenges, etc.</li>
+                <li>Challenge types: HTTP, DNS, <strike>and TLS-SNI</strike>, TLS-ALPN (2018)</li>
+            </ul>
+        </section>
+        <section>
+          <img style="background: white; width: 50%;" src="certbot.svg" /><br />
+          <ul style="font-size: 0.8em;">
+            <li>ACME client software</li>
+            <li>Manages acquirance, renewal and revocation</li>
+            <li>(Optionally) Configures secure TLS settings for you</li>
+            <li>(Optionally) Helps to configure security enhancements</li>
+          </ul>
+        </section>
+        <section>
+          <h1>2016</h1>
+          <ul style="font-size: 0.8em;">
+            <li>Public beta ends in April, with almost 2 million signed certificates</li>
+            <li>Certbot (formerly known as "letsencrypt") gets its name</li>
+            <li>Rapid growth. 20 million active certificates at the end of the year</li>
+            <li>Alpha version of Nginx plugin in Certbot</li>
+            <li>46% of web requests made over HTTPS</li>
+          </ul>
+        </section>
+        <section>
+          <h1>2017</h1>
+          <ul style="font-size: 0.8em;">
+            <li>100 million certificates issued!</li>
+            <li>At the end of the year 46 million unexpired certificates serving 61 million domains</li>
+            <li>58% of web requests made over HTTPS</li>
+          </ul>
+        </section>
+        <section>
+          <h1>2018</h1>
+          <ul style="font-size: 0.8em;">
+            <li>ACME v2 and wildcard support going live in <strike>January</strike>, <strike>February</strike>, March</li>
+            <li>...but we have an issue on our hands...</li>
+          </ul>
+        </section>
+        <section>
+          <img style="width: 80%; height: 80%;" src="frans.png" />
+        </section>
+        <section>
+          <h1>2018</h1>
+          <ul style="font-size: 0.8em;">
+            <li>ACME v2, wildcard support and DNS validation</li>
+            <li>TLS-SNI challenge type disabled, and removed from ACME draft</li>
+            <li>TLS-ALPN challenge type added</li>
+            <li>77% of web requests made over HTTPS</li>
+          </ul>
+        </section>
+
+        <section>
+          <h1>2019</h1>
+          <ul style="font-size: 0.8em;">
+            <li>TLS-SNI turned off completely</li>
+            <li>ACME protocol is now internet standard! RFC 8555</li>
+            <li>Upcoming: multiple perspective validation</li>
+            <li>Upcoming: CAA extensions (hopefully)</li>
+            <li>Upcoming: Certbot Windows support</li>
+          </ul>
+        </section>
+
+        <section>
+          <h1>Currently</h1>
+        </section>
+
+        <section>
+          <img src="https_requests.png" />
+        </section>
+
+        <section>
+          <img src="le_growth.png" />
+        </section>
+
+        <section>
+          <h1>That's not all folks</h1>
+          <ul style="font-size: 0.8em;">
+            <li>ACME getting adopted by other CA's! Buypass AS everyone!</li>
+            <li>STARTTLS everywhere project is trying to bring mail infrastructure up to speed</li>
+            <li>MTA-STS is now internet standard! RFC 8461</li>
+          </ul>
+        </section>
+
+        <section>
+          <h5>From this</h5>
+          <img src="security_alert.png" />
+        </section>
+        <section>
+          <h2>To HTTPS demanded per default</h2>
+        </section>
+        <section>
+            <h1>Le History...</h1>
+            <section>
+            <ul class="small">
+                <li>xx.xx.2012 - Project starts</li>
+                <li>18.11.2014 - Let's Encrypt publicly announced</li>
+                <li>04.06.2015 - Root & intermediate certificates generated</li>
+                <li>14.09.2015 - <a href="https://crt.sh/?id=9314793">First Certificate</a></li>
+                <li>19.10.2015 - Root certificate cross-signed by IdenTrust</li>
+                <li>03.12.2015 - Public Beta</li>
+                <li>08.03.2016 - One millionth certificate signed</li>
+                <li>XX.03.2016 - <a href="https://letsencrypt.org/2016/06/23/defending-our-brand.html">Comodo name hijack attempt</a> (filed Oct 2015)</li>
+                <li>26.07.2016 - IPv6 support</li>
+                <li>21.10.2016 - IDN support</li>
+            </ul>
+            </section>
+            <section>
+            <ul class="small">
+                <li>28.07.2017 - 100 millionth certificate signed</li>
+                <li>09.01.2018 - <a href="https://community.letsencrypt.org/t/2018-01-09-issue-with-tls-sni-01-and-shared-hosting-infrastructure/49996">TLS-SNI disabled</a></li>
+                <li>13.03.2018 - Wildcard certificate support</li>
+                <li>06.08.2018 - Root certificate trusted by all major root programs</li>
+                <li>25.01.2022 - <a href="https://community.letsencrypt.org/t/2022-01-25-issue-with-tls-alpn-01-validation-method/170450">TLS-ALPN-01 issue</a>, revocation of <1% of active certs</li>
+            </ul>
+            </section>
+        </section>
+        <section>
+            <h1>How its going</h1>
+            <img src="le_stats.png">
+        </section>
+        <section>
+          <h1>Validation methods</h1>
+          <h4>Initially three challenge types supported by Let's Encrypt</h4>
+          <ul>
+            <li>HTTP</li>
+            <li>TLS-SNI</li>
+            <li>DNS</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Validation methods</h1>
+          <h4>(again!) Three challenge types supported by Let's Encrypt</h4>
+          <ul>
+            <li>HTTP</li>
+            <li>TLS-ALPN (July 2018)</li>
+            <li>DNS</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Why dns validation?</h1>
+          <ul>
+            <li>Non-HTTP? No need to open additional ports</li>
+            <li>Complex infrastructure, loadbalancers, reverse proxies etc.</li>
+            <li>Wildcard certificates</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Typical Issues</h1>
+          <ul>
+            <li>Only servers/providers with API or TSIG support.</li>
+            <li>Credentials stored on every box!</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Credentials on disk!</h1>
+          <ul>
+            <li>Check for renewal cron jobs / systemd timers</li>
+            <li>Some software like Caddy uses ENV vars: scripts!</li>
+            <li>Certbot: cat /etc/letsencrypt/renewal/*.conf</li>
+            <li>acme.sh: cat /home/*/.acme.sh/account.conf</li>
+            <li>acme.sh: cat /root/.acme.sh/account.conf</li>
+            <li>wildcard cert - probable win. ct logs!</li>
+          </ul>
+        </section>
+        
+        <section>
+          <img style="width: 50%; height: 50%;" src="catastrophe.jpg" />
+        </section>
+
+        <section>
+          <h3>Typical Validation flow</h3>
+          <ol>
+            <li><strong>CA</strong> <span style="color: red;">-&gt;</span> <strong>Client</strong>: _validation_token_</li>
+            <li><strong>Client</strong> <span style="color: red;">-&gt;</span> <strong>DNS</strong>: Create TXT record</li>
+            <li><strong>Client</strong> <span style="color: red;">-&gt;</span> <strong>CA</strong>: Ok, ready</li>
+            <li><strong>CA</strong> <span style="color: red;">-&gt;</span> <strong>DNS</strong>: Request TXT record</li>
+          </ol>
+        </section>
+
+        <section>
+          <h3>acme-dns validation flow</h3>
+          <ol>
+            <li><strong>CA</strong> <span style="color: red;">-&gt;</span> <strong>Client</strong>: _validation_token_</li>
+            <li><strong>Client</strong> <span style="color: red;">-&gt;</span> <strong>acme-dns</strong>: Create TXT record</li>
+            <li><strong>Client</strong> <span style="color: red;">-&gt;</span> <strong>CA</strong>: Ok, ready</li>
+            <li><strong>CA</strong> <span style="color: red;">-&gt;</span> <strong>DNS</strong>: Request TXT record</li>
+            <li><strong>DNS</strong> <span style="color: red;">-&gt;</span> <strong>CA</strong>: Follow CNAME please</li>
+            <li><strong>CA</strong> <span style="color: red;">-&gt;</span> <strong>acme-dns</strong>: Request TXT record</li>
+          </ol>
+        </section>
+        
+        <section>
+            <h1>Acme-dns</h1>
+            <p class="small">A simplified DNS server with a RESTful HTTP API to provide a simple way to automate ACME DNS challenges.</p>
+            <ul>
+              <li><span class="hlbg">Authorative DNS</span> for delegated subzone
+                <ul>
+                  <li class="smaller">NS record for subdomain</li>
+                </ul>
+              </li>
+              <li>Main features:
+                <ul>
+                  <li class="smaller">Custom (in memory) records</li>
+                  <li class="smaller"><span class="hlbg">API</span> only for TXT record updates</li>
+                  <li class="smaller"><span class="hlbg">CIDR</span> mask whitelisting</li>
+                  <li class="smaller"><span class="hlbg">SQLite</span> / <span class="hlbg">PostgreSQL</span> as backend</li>
+                  <li class="smaller">Automatic LE <span class="hlbg">certificates</span> for API</li>
+                  <li class="smaller">Instantly available, no need to wait for <span class="hlbg">DNS propagation</span></li>
+                </ul>
+              </li>
+            </ul>
+        </section>
+        <section>
+          <h1>How it works?</h1>
+          <ul>
+            <li>Delegation apex subdomain</li>
+            <li>Exactly two endpoints for POST data
+              <ul>
+                <li class="smaller">/register</li>
+                <li class="smaller">/update</li>
+              </ul></li>
+            <li>Credentials are disposable, just change CNAME</li>
+          </ul>
+        </section>
+        
+        <section>
+          <h1>Workflow</h1>
+          <ol>
+            <li>POST to acme-dns/register<ul>
+                <li class="smaller">Get unique subdomain and credentials</li>
+                <li class="smaller">Can set IP whitelisting</li>
+              </ul>
+            </li>
+            <li>CNAME to the subdomain received from /register</li>
+            <li>POST to acme-dns/update<ul>
+                <li class="smaller">Automate!</li>
+                <li class="smaller">Works as long as the CNAME is in place</li>
+              </ul>
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h1>Register</h1>
+          <pre style="width: 99%;font-size: 11pt;"><code data-trim data-noescape>
+▶ curl -X POST https://auth.yourdomain.tld/register
+
+Response:
+
+< HTTP/1.1 201 Created
+< Content-Type: application/json
+
+{
+    "allowfrom": [],
+    "fulldomain": "a14ec696-0df2-498c-a114-609319e67255.auth.yourdomain.tld",
+    "password": "suYXfkUYyDpo00tp9UV26o9PVK4wPqSVGsBwLakX",
+    "subdomain": "a14ec696-0df2-498c-a114-609319e67255",
+    "username": "05cc6238-ac36-4979-9455-f4f3fadc8792"
+}
+          </code></pre>
+        </section>
+
+        <section>
+          <h1>Update</h1>
+          <pre style="width: 99%;font-size: 11pt;"><code data-trim data-noescape>
+▶ curl -v -X POST https://auth.yourdomain.tld/update \
+-H 'X-Api-User: 05cc6238-ac36-4979-9455-f4f3fadc8792' \
+-H 'X-Api-Key: suYXfkUYyDpo00tp9UV26o9PVK4wPqSVGsBwLakX' \ 
+--data '
+{
+   "subdomain": "a14ec696-0df2-498c-a114-609319e67255",
+   "txt": "___validation_token_received_from_the_ca___"
+}
+'         
+
+Response: 
+
+< HTTP/1.1 200 OK
+< Content-Type: application/json
+
+{"txt": "___validation_token_received_from_the_ca___"}
+</code></pre>
+        </section>
+
+        <section>
+          <h1>Query</h1>
+          <pre style="width: 99%;font-size: 11pt;"><code data-trim data-noescape>
+▶ dig @auth.yourdomain.tld a14ec696-0df2-498c-a114-609319e67255.auth.example.org TXT
+                                                     
+; <<>> DiG 9.10.3-P4-Debian <<>> @localhost a14ec696-0df2-498c-a114-609319e67255.auth.yourdomain.tld TXT
+; (2 servers found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 37947
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;a14ec696-0df2-498c-a114-609319e67255.auth.yourdomain.tld. IN TXT
+
+;; ANSWER SECTION:
+a14ec696-0df2-498c-a114-609319e67255.auth.yourdomain.tld. 1 IN TXT	"___validation_token_received_from_the_ca___"
+
+;; Query time: 0 msec
+;; SERVER: ::1#53(::1)
+;; WHEN: Sat Jan 13 16:39:26 EET 2018
+;; MSG SIZE  rcvd: 180
+          </code></pre>
+        </section>
+        <section>
+          <h1>Roll up your sleeves</h1>
+          <p>Head to <strong>https://0x42.fi/</strong></p>
+        </section>
+        <section>
+          <h1>Advanced topics</h1>
+          <ul>
+            <li>CAA & CAA extensions</li>
+            <li>Certificate distribution</li>
+          </ul>
+        </section>
+        <section>
+          <h1>CAA record</h1>
+          <p>Limit issuance to a (set of) CA's for this domain.</p>
+          <p>Email address for incident reports.</p>
+<pre><code>0x42.fi.	IN	CAA	0 issue "letsencrypt.org"
+0x42.fi.	IN	CAA	0 iodef "mailto:joona@io.fi"
+</code></pre>
+        </section>
+        <section>
+          <h1>validation methods</h1>
+          <p>CAA extension, RFC draft: draft-ietf-acme-caa-05</p>
+          <p>Limits issuance to an ACME account id.</p>
+          <pre><code>example.com. IN CAA 0 issue "example.net; \
+     accounturi=https://example.net/account/1234; \
+     validationmethods=dns-01"</code></pre>
+        </section>
+        <section>
+          <h1>Distribution</h1>
+          <p>Certbot supports renewal hooks - shell scripts that get run after successful renewal of certificate.</p>
+          <p>Just drop a script that's executable to: <pre><code>/etc/letsencrypt/renewal-hooks/deploy/</code></pre></p>
+          <ul>
+            <li>Environment var: $RENEWED_DOMAINS</li>
+            <li>Environment var: $RENEWED_LINEAGE</li>
+          </ul>
+        </section>
+        <section>
+          <h1>Example</h1>
+          <pre><code style="font-size: 0.5em;">for domain in $RENEWED_DOMAINS; do
+        case $domain in
+        0x42.fi)
+                ssh_key=/path/to/ssh_key
+                
+                # Transfer the certificates to hosts
+                scp -i $ssh_key -r $RENEWED_LINEAGE deploy_user@remote.server1.tld:
+                scp -i $ssh_key -r $RENEWED_LINEAGE deploy_user@remote.server2.tld:
+
+                # Run the remote deployment script
+                ssh -i $ssh_key deploy_user@remote.server1.tld "deployment_script.sh"
+                ssh -i $ssh_key deploy_user@remote.server2.tld "deployment_script.sh"
+                ;;
+        esac
+done
+</code></pre>
+       </section>
+       <section>
+          <h3>What's next?</h3>
+          <img src="upcloud_logo_horizontal_white.svg" style="background: none; border: 0px;width: 50%;" />
+          <p style="font-size: 0.7em;">If you wish to keep using your acme-dns instance(s), you can change the account and payment details at <a href="https://hub.upcloud.com/">UpCloud HUB</a>.</p>
+          <p style="font-size: 0.7em;">UpCloud has a good tutorial resource to assist you through the process, that can be found at: <a href="https://upcloud.com/community/tutorials/quick-start-guide/">https://upcloud.com/community/tutorials/quick-start-guide/</a></p>
+          <p style="font-size: 0.7em;">If you encounter any issues while changing the user details, feel free to email <a href="mailto:samu.saarniluoto@upcloud.com">samu.saarniluoto@upcloud.com</a> .</p> 
+      </section>
+
+
+       </section>
+       <section>
+         <h1>Thanks!</h1>
+         <p>If you have questions to ask, or beers that need drinking I can be contacted via Twitter and GitHub, under user name @joohoi </p>
+         <p>For email, PGP pubkey, Signal etc, check https://1o.fi/</p>
+        </section>
+  
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+    <script src="asciinema-player.js"></script>
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+        progress: true,
+        history: true,
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+				]
+			});
+		</script>
+	</body>
+</html>

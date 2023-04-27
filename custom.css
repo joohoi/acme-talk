@@ -1,0 +1,19 @@
+.smaller {
+    font-size: 0.6em !important;
+}
+
+.small {
+    font-size: 0.8em !important;
+}
+
+.hlbg {
+    font-style: italic !important;
+}
+
+ul > li {
+    font-size: 0.7em;
+}
+
+p {
+    font-size: 0.7em;
+}
